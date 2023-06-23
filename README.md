@@ -294,3 +294,43 @@ Labels are key/value pairs.  You may specify just a label key pattern to exclude
 * `docker`
 * `jsonpath_rw`
 * `python-dateutil`
+* Python 3
+
+## Amazon CloudWatch Agent
+If you want to output to the Amazon Cloudwatch Agent, add the TypesDB of Docker plugin to Amazon Cloudwatch Agent configuration.
+
+```json
+"metrics_collected": {
+  "collectd": {
+    "metrics_aggregation_interval": 60,
+    "collectd_typesdb": [
+      "/usr/share/collectd/types.db",
+      "/usr/share/docker-collectd-plugin/dockerplugin.db"
+    ],
+    "collectd_security_level": "none"
+},
+```
+
+Add the Network plugin to collectd configuration.
+
+```apache
+LoadPlugin network
+<Plugin "network">
+  Server "127.0.0.1" "25826"
+  ReportStats false
+</Plugin>
+
+TypesDB "/usr/share/collectd/types.db"
+TypesDB "/usr/share/docker-collectd-plugin/dockerplugin.db"
+LoadPlugin python
+<Plugin python>
+  ModulePath "/usr/share/docker-collectd-plugin"
+  Import "dockerplugin"
+
+  <Module dockerplugin>
+    BaseURL "unix://var/run/docker.sock"
+  </Module>
+</Plugin>
+```
+
+Security level should be set to "encrypt" on the production environment:)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 #
 # Collectd plugin for collecting docker container stats
@@ -46,7 +46,7 @@ def _c(c):
     argument is a string, it is assumed to be the container's ID and only the
     first 7 digits will be returned. If it's a dictionary, the string returned
     is <7-digit ID>/<name>."""
-    if type(c) == str or type(c) == unicode:
+    if type(c) == str: # or type(c) == unicode:
         return c[:7]
     return '{id}/{name}'.format(id=c['Id'][:7], name=c.get('Name', c['Names']))
 
@@ -132,6 +132,9 @@ def read_blkio_stats(container, dimensions, stats, t):
         device_major_stats = {}
         device_minor_stats = {}
 
+        if key != 'io_service_bytes_recursive':
+            continue
+
         for value in values:
             k = '{key}-{major}-{minor}'.format(key=key,
                                                major=value['major'],
@@ -149,7 +152,7 @@ def read_blkio_stats(container, dimensions, stats, t):
             blkio_dims['device_major'] = str(device_major_stats[type_instance])
             blkio_dims['device_minor'] = str(device_minor_stats[type_instance])
 
-            if len(values) == 5:
+            if len(values) == 2:
                 emit(container, blkio_dims, 'blkio', values,
                      type_instance=key, t=t)
             elif len(values) == 1:
@@ -169,7 +172,7 @@ def read_cpu_stats(container, dimensions, stats, t):
     log.info('Reading cpu stats: {0}'.format(cpu_stats))
 
     cpu_usage = cpu_stats['cpu_usage']
-    percpu = cpu_usage['percpu_usage']
+    percpu = [] # cpu_usage['percpu_usage']
 
     for cpu, value in enumerate(percpu):
         percpu_dims = dimensions.copy()
@@ -198,7 +201,7 @@ def get_cpu_percent(stats):
     if 'precpu_stats' in stats:
         precpu_stats = stats['precpu_stats']
         precpu_usage = precpu_stats['cpu_usage']
-        percpu = cpu_usage['percpu_usage']
+        cpus = stats['cpu_stats']['online_cpus']
         cpu_delta = cpu_usage['total_usage'] - precpu_usage['total_usage']
         # Sometimes system_cpu_usage is not in cpu_stats (when there's load)
         if 'system_cpu_usage' in stats['cpu_stats']:
@@ -207,7 +210,7 @@ def get_cpu_percent(stats):
                 pre_system_cpu_usage = precpu_stats['system_cpu_usage']
                 system_delta = float(system_cpu_usage - pre_system_cpu_usage)
                 if system_delta > 0 and cpu_delta > 0:
-                    cpu_percent = cpu_delta / system_delta * len(percpu)
+                    cpu_percent = cpu_delta / system_delta * cpus
                     cpu_percent *= 100
     return cpu_percent
 
@@ -233,7 +236,7 @@ def read_memory_stats(container, dimensions, stats, t):
     mem_stats = stats['memory_stats']
     log.info('Reading memory stats: {0}'.format(mem_stats))
 
-    values = [mem_stats['limit'], mem_stats['max_usage'], mem_stats['usage']]
+    values = [mem_stats['limit'], mem_stats['usage']]
     emit(container, dimensions, 'memory.usage', values, t=t)
 
     detailed = mem_stats.get('stats')
@@ -437,11 +440,11 @@ class ContainerStats(threading.Thread):
                     self._feed = self._client.stats(self._container,
                                                     stream=True,
                                                     decode=False)
-                self._stats = self._feed.next()
+                self._stats = self._feed.__next__()
 
                 # Reset failure count on successful read from the stats API.
                 failures = 0
-            except Exception, e:
+            except Exception as e:
                 # If we encounter a failure, wait a second before retrying and
                 # mark the failures. After three consecutive failures, we'll
                 # stop the thread. If the container is still there, we'll spin
@@ -646,7 +649,7 @@ class DockerPlugin:
 
         try:
             version = self.client.version()['ApiVersion']
-        except IOError, e:
+        except IOError as e:
             # Log a warning if connection is not established
             collectd.warning((
                     'Unable to access Docker daemon at {url} in \
@@ -686,7 +689,7 @@ class DockerPlugin:
     def read_callback(self):
         try:
             version = self.client.version()['ApiVersion']
-        except IOError, e:
+        except IOError as e:
             # Log a warning if connection is not established
             log.exception(('Unable to access Docker daemon at {url}. '
                            'This may indicate SELinux problems. : {error}')
@@ -747,7 +750,7 @@ class DockerPlugin:
                         continue
                     try:
                         method(container, cstats.dimensions, stats, read_at)
-                    except Exception, e:
+                    except Exception as e:
                         log.exception(('Unable to retrieve {method} stats '
                                        'for container {container}: {msg}')
                                       .format(
@@ -764,12 +767,12 @@ class DockerPlugin:
                         containers_state.append({
                                     'container': container,
                                     'container_inspect': container_inspect})
-                    except Exception, e:
+                    except Exception as e:
                         log.exception(('Unable to retrieve cpu share and quota'
                                        ' stats for {container}: {msg}').format(
                                            container=_c(container), msg=e))
 
-            except Exception, e:
+            except Exception as e:
                 log.exception(('Unable to retrieve stats for container '
                                '{container}: {msg}')
                               .format(container=_c(container), msg=e))
@@ -921,8 +924,8 @@ if __name__ == '__main__':
             identifier += '/' + self.type
             if getattr(self, 'type_instance', None):
                 identifier += '-' + self.type_instance
-            print 'PUTVAL', identifier, \
-                ':'.join(map(str, [int(self.time)] + self.values))
+            print('PUTVAL', identifier, \
+                ':'.join(map(str, [int(self.time)] + self.values)))
 
     class ExecCollectd:
         def Values(self):
@@ -932,19 +935,19 @@ if __name__ == '__main__':
             pass
 
         def error(self, msg):
-            print 'ERROR: ', msg
+            print('ERROR: ', msg)
 
         def warning(self, msg):
-            print 'WARNING:', msg
+            print('WARNING:', msg)
 
         def notice(self, msg):
-            print 'NOTICE: ', msg
+            print('NOTICE: ', msg)
 
         def info(self, msg):
-            print 'INFO:', msg
+            print('INFO:', msg)
 
         def debug(self, msg):
-            print 'DEBUG: ', msg
+            print('DEBUG: ', msg)
 
     collectd = ExecCollectd()
 
